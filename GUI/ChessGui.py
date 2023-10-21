@@ -2,9 +2,11 @@ from tkinter import *
 from PIL import Image, ImageTk
 
 from GUI.ChessPieceImages import piece_image_paths
+#from GUI.ChessPieceDnDHandler import ChessPieceDnD
 from GUI.MenuCommands import *
 
 __MAGIC_NUMBER__ = 8
+__BG_COLORS__ = ["white", "black"]
 
 class ChessGUI:
 
@@ -21,7 +23,7 @@ class ChessGUI:
         
         self.create_menu()
         self.create_chessboard()
-        self.init_pieces()
+        #self.init_pieces()
 
     # Creates the menu opjects for the GUI
     def create_menu(self):
@@ -61,55 +63,51 @@ class ChessGUI:
             header_label = Label(self.root, text=str(__MAGIC_NUMBER__ - i))
             header_label.grid(row=i, column=0)
 
-        # Create a Canvas object with an 8x8 grid of rectabgles to represent the chessboard
-        # The canvas is sized by the main function passing a size variable
+        # Create a Canvas object that is sized to be 8 * the designated board size.
+        # The canvas is placed onto the root grid at a position to the right of the number column, it spans 8 X 8
         self.__board = Canvas(self.root, width=self.boardsize * __MAGIC_NUMBER__, height=self.boardsize * __MAGIC_NUMBER__)
-
-        square_size = self.boardsize
-        colors = ["white", "black"]
-        for row in range(__MAGIC_NUMBER__):
-            for col in range(__MAGIC_NUMBER__):
-                x1, y1 = col * square_size, row * square_size
-                x2, y2 = x1 + square_size, y1 + square_size
-                self.__board.create_rectangle(x1, y1, x2, y2, fill=colors[(row + col) % 2], outline=colors[(row + col) % 2])
-
         self.__board.grid(row=0, column=1, rowspan=__MAGIC_NUMBER__, columnspan=__MAGIC_NUMBER__)
+        self.__board.dnd_accept = self.dnd_accept
 
-       
-
-     # Creates the chessboard grid
-    def init_pieces(self):
-
-       
         # Load chess piece images using the PhotoImage constructor
-        # Load, resize, and display chess piece images using Pillow
+        # Load, resize, and contain references to the chess piece images using Pillow
         for piece in piece_image_paths:
             image = Image.open(piece_image_paths[piece]).convert('RGBA')
             image = image.resize((self.boardsize, self.boardsize))
             self.__piece_images[piece] = ImageTk.PhotoImage(image)
         
-        # Convert the images to PhotoImage objects and create labels
+        # Create a dictionary of Labels objects that can be referenced by the specific row and column
         for row in range(__MAGIC_NUMBER__):
-            
-            if (row <= 1 or row >= 6):
+            for col in range(__MAGIC_NUMBER__):
+                
+                # get the piece and background color for the specific board position
+                piece = self.get_chess_piece_for_pos(row, col)
+                bgcolor = __BG_COLORS__[(row + col) % 2]
 
-                for col in range(__MAGIC_NUMBER__):
+                # Determine if the board position is empty and only needs a label with a background color
+                # If not then create a label with the proper chess piece image
+                if piece == "empty":
+                    label = Label(self.__board, bg=bgcolor, height=self.boardsize, width=self.boardsize)
+                else:
+                    label = Label(self.__board, image=self.__piece_images.get(piece), bg=bgcolor)
+                
+                #label.drag_source_register(tk.DND_TEXT)
+                #label.drop_target_register(tk.DND_TEXT)
+                #dnd = ChessPieceDnD(label)
 
-                    piece = self.get_chess_piece_for_pos(row, col)
-                    
-                    colors = ["white", "black"]
-                    label = Label(self.__board, image=self.__piece_images.get(piece), bg=colors[(row + col) % 2])
+                # Add the label to the dictionary of labels
+                self.__piece_labels[(row, col)] = label
+                
+                # place the bess piece on the canvas
+                self.place_chess_piece(row, col, label)
+        
+       
+    def place_chess_piece(self, row, col, label):
+        x = col * self.boardsize
+        y = row * self.boardsize
+        label.place(x=x, y=y)
 
-                    self.__piece_labels[(row, col)] = label
-                 
-                    label.lift()
-
-                    x = col * self.boardsize
-                    y = row * self.boardsize
-                    label.place(x=x, y=y)
-
-                    
-
+        
     def get_chess_piece_for_pos(self, row, col):
         if row == 0:
             if col == 0 or col == 7:
@@ -142,9 +140,34 @@ class ChessGUI:
             else:
                 return "Invalid Pos(col)"
         else:
-            print (row)
-            return "Invalid Pos(row)"
+            return "empty"
        
+
+    def dnd_accept(self, source, event):
+        return self
+    
+    def dnd_enter(self, source, event):
+        self.canvas.focus_set() # Show highlight border
+        x, y = source.where(self.canvas, event)
+        x1, y1, x2, y2 = source.canvas.bbox(source.id)
+        dx, dy = x2-x1, y2-y1
+        self.dndid = self.canvas.create_rectangle(x, y, x+dx, y+dy)
+        self.dnd_motion(source, event)
+
+    def dnd_motion(self, source, event):
+        x, y = source.where(self.canvas, event)
+        x1, y1, x2, y2 = self.canvas.bbox(self.dndid)
+        self.canvas.move(self.dndid, x-x1, y-y1)
+
+    def dnd_leave(self, source, event):
+        self.top.focus_set() # Hide highlight border
+        self.canvas.delete(self.dndid)
+        self.dndid = None
+
+    def dnd_commit(self, source, event):
+        self.dnd_leave(source, event)
+        x, y = source.where(self.canvas, event)
+        source.attach(self.canvas, x, y)
 
     def new_game(self):
         print("New Game")
